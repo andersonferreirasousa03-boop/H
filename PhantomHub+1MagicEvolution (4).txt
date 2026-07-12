@@ -2217,4 +2217,140 @@ local function createShiftLockUI()
     shiftLockIcon.Size = UDim2.new(0.05, 0, 0.1, 0)
     shiftLockIcon.Position = UDim2.new(0.95, 0, 0.68, 0)
     shiftLockIcon.BackgroundTransparency = 1
-    shiftLockIcon.Image
+    shiftLockIcon.Image = "rbxassetid://105987953182009"
+    shiftLockIcon.Parent = shiftLockScreenGui
+    shiftLockIcon.ZIndex = 999998
+
+    shiftLockIcon.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            shiftLockActive = not shiftLockActive
+            shiftLockIcon.Image = shiftLockActive and "rbxassetid://139211296111194" or "rbxassetid://105987953182009"
+        end
+    end)
+end
+
+local function destroyShiftLockUI()
+    if shiftLockScreenGui then
+        shiftLockScreenGui:Destroy()
+        shiftLockScreenGui = nil
+        shiftLockIcon = nil
+    end
+end
+
+task.spawn(function()
+    while task.wait(0.1) do
+        local shiftLockEnabled = optionStates["Enable Shift Lock"]
+        if type(shiftLockEnabled) == "function" then shiftLockEnabled = shiftLockEnabled() end
+
+        if shiftLockEnabled and not shiftLockScreenGui then
+            createShiftLockUI()
+        elseif not shiftLockEnabled and shiftLockScreenGui then
+            destroyShiftLockUI()
+            shiftLockActive = false
+            if shiftLockConnection then
+                shiftLockConnection:Disconnect()
+                shiftLockConnection = nil
+            end
+        end
+
+        if shiftLockScreenGui and shiftLockActive then
+            local char = LP.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local root = char.HumanoidRootPart
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.AutoRotate = false
+                    if not shiftLockConnection then
+                        shiftLockConnection = RunService.RenderStepped:Connect(function()
+                            local currentChar = LP.Character
+                            if currentChar and currentChar:FindFirstChild("HumanoidRootPart") then
+                                local currentRoot = currentChar.HumanoidRootPart
+                                local camera = workspace.CurrentCamera
+                                if camera then
+                                    local lookVector = camera.CFrame.LookVector
+                                    currentRoot.CFrame = CFrame.new(currentRoot.Position, currentRoot.Position + Vector3.new(lookVector.X, 0, lookVector.Z))
+                                end
+                            end
+                        end)
+                    end
+                end
+            end
+        elseif shiftLockScreenGui and not shiftLockActive then
+            if shiftLockConnection then
+                shiftLockConnection:Disconnect()
+                shiftLockConnection = nil
+            end
+
+            local char = LP.Character
+            if char then
+                local humanoid = char:FindFirstChildOfClass("Humanoid")
+                if humanoid then
+                    humanoid.AutoRotate = true
+                end
+            end
+        end
+    end
+end)
+
+Player.CharacterAdded:Connect(function()
+    if shiftLockConnection then
+        shiftLockConnection:Disconnect()
+        shiftLockConnection = nil
+    end
+    isFlyActive = false
+    bg = nil
+    bv = nil
+    noclipParts = {}
+end)
+
+local function stopAllScriptFeatures()
+    autoOpenStarActive = false
+    autoFarmActive = false
+    autoEquipBestActive = false
+    autoClickActive = false
+    platformToggleActive = false
+    autoDungeonTrainPowerActive = false
+    stopOpenStarWatchers()
+    destroyPlatform()
+    isFlyActive = false
+    noclipEnabled = false
+    getgenv().ShiftLockEnabled = false
+
+    for name, value in pairs(optionStates) do
+        if type(value) == "boolean" then
+            optionStates[name] = false
+        end
+    end
+
+    if bg then
+        pcall(function() bg:Destroy() end)
+        bg = nil
+    end
+
+    if bv then
+        pcall(function() bv:Destroy() end)
+        bv = nil
+    end
+
+    for part, canCollide in pairs(noclipParts) do
+        if part and part.Parent then
+            pcall(function() part.CanCollide = canCollide end)
+        end
+    end
+    noclipParts = {}
+
+    if destroyShiftLockUI then
+        destroyShiftLockUI()
+    end
+end
+
+ConfirmYesButton.Activated:Connect(function()
+    saveCurrentSettings()
+    stopAllScriptFeatures()
+    if ScreenGui then
+        ScreenGui:Destroy()
+    end
+end)
+
+Player.CharacterAdded:Connect(function()
+end)
