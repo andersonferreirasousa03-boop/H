@@ -1473,7 +1473,7 @@ createOption("Open Star", false, "Auto Buy", function(state)
                 pcall(function()
                     getRemote("Bridge"):FireServer("General", "Star", "Open")
                 end)
-                task.wait(2.35)
+                task.wait(2.50)
             end
         end)
     else
