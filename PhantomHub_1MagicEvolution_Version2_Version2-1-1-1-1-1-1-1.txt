@@ -2124,7 +2124,6 @@ createOption("Auto Farm Accessories", false, "Farm", function(state)
                             pcall(function()
                                 game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Bridge"):FireServer(unpack(teleportArgs))
                             end)
-                            task.wait(0.5)
                         end
 
                         local foundMap = mapsFolder and mapsFolder:FindFirstChild(mapName)
@@ -2160,21 +2159,10 @@ createOption("Auto Farm Accessories", false, "Farm", function(state)
                                     pcall(function()
                                         getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
                                     end)
-                                    task.wait(1)
-                                else
-                                    task.wait(1)
                                 end
-                            else
-                                task.wait(1)
                             end
-                        else
-                            task.wait(1)
                         end
-                    else
-                        task.wait(1)
                     end
-                else
-                    task.wait(1)
                 end
             end
         end)
@@ -2283,11 +2271,119 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
     autoKillRandomMobActive = state
     if state then
         visitedPiecesKillRandom = {}
+        local selectedWorldIndex = nil
+        local currentTargetPiece = nil
+        local lastTeleportTime = 0
+        
         task.spawn(function()
             while autoKillRandomMobActive do
                 local currentWorldName = getCurrentWorldName()
+                local selectedWorld = optionStates["MobWorldSelector"]
                 
-                if currentWorldName then
+                if selectedWorld and selectedWorld ~= selectedWorldIndex then
+                    selectedWorldIndex = selectedWorld
+                    visitedPiecesKillRandom = {}
+                    currentTargetPiece = nil
+                end
+                
+                if selectedWorld and currentWorldName then
+                    local targetWorldName = mobWorldsList[selectedWorld]
+                    if targetWorldName ~= currentWorldName then
+                        pcall(function()
+                            getRemote("Bridge"):FireServer("General", "Portal", "Teleport", targetWorldName)
+                        end)
+                    else
+                        local server = workspace:FindFirstChild("Server")
+                        local enemiesRoot = server and server:FindFirstChild("Enemies")
+                        
+                        if enemiesRoot then
+                            local worldFolder = enemiesRoot:FindFirstChild(currentWorldName)
+                            
+                            if worldFolder then
+                                if not currentTargetPiece or not currentTargetPiece.Parent then
+                                    local allPieces = {}
+                                    for _, piece in pairs(worldFolder:GetChildren()) do
+                                        if piece:IsA("BasePart") or piece:IsA("Model") then
+                                            table.insert(allPieces, piece)
+                                        end
+                                    end
+                                    
+                                    local unvisitedPieces = {}
+                                    for _, piece in pairs(allPieces) do
+                                        local isVisited = false
+                                        for _, visitedPiece in pairs(visitedPiecesKillRandom) do
+                                            if visitedPiece == piece then
+                                                isVisited = true
+                                                break
+                                            end
+                                        end
+                                        if not isVisited then
+                                            local folder = piece:FindFirstChild("Folder")
+                                            if not folder or #folder:GetChildren() == 0 then
+                                                table.insert(unvisitedPieces, piece)
+                                            end
+                                        end
+                                    end
+                                    
+                                    if #unvisitedPieces == 0 and #allPieces > 0 then
+                                        visitedPiecesKillRandom = {}
+                                        for _, piece in pairs(allPieces) do
+                                            local folder = piece:FindFirstChild("Folder")
+                                            if not folder or #folder:GetChildren() == 0 then
+                                                table.insert(unvisitedPieces, piece)
+                                            end
+                                        end
+                                    end
+                                    
+                                    if #unvisitedPieces > 0 then
+                                        currentTargetPiece = unvisitedPieces[math.random(1, #unvisitedPieces)]
+                                    end
+                                end
+                                
+                                if currentTargetPiece then
+                                    local targetCFrame = nil
+                                    if currentTargetPiece:IsA("BasePart") then
+                                        targetCFrame = currentTargetPiece.CFrame + Vector3.new(0, 8, 0)
+                                    elseif currentTargetPiece:IsA("Model") then
+                                        if currentTargetPiece.PrimaryPart then
+                                            targetCFrame = currentTargetPiece.PrimaryPart.CFrame + Vector3.new(0, 8, 0)
+                                        else
+                                            for _, d in pairs(currentTargetPiece:GetDescendants()) do
+                                                if d:IsA("BasePart") then
+                                                    targetCFrame = d.CFrame + Vector3.new(0, 8, 0)
+                                                    break
+                                                end
+                                            end
+                                        end
+                                    end
+                                    
+                                    if targetCFrame then
+                                        local currentTime = tick()
+                                        if currentTime - lastTeleportTime >= 0.035 then
+                                            local _, _, hrp = getCharacterParts()
+                                            if hrp then
+                                                pcall(function()
+                                                    hrp.CFrame = targetCFrame
+                                                end)
+                                            end
+                                            lastTeleportTime = currentTime
+                                        end
+                                        
+                                        pcall(function()
+                                            getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
+                                        end)
+                                        
+                                        local folder = currentTargetPiece:FindFirstChild("Folder")
+                                        if not folder or #folder:GetChildren() == 0 then
+                                            table.insert(visitedPiecesKillRandom, currentTargetPiece)
+                                            currentTargetPiece = nil
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                elseif currentWorldName then
                     local server = workspace:FindFirstChild("Server")
                     local enemiesRoot = server and server:FindFirstChild("Enemies")
                     
@@ -2295,51 +2391,55 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
                         local worldFolder = enemiesRoot:FindFirstChild(currentWorldName)
                         
                         if worldFolder then
-                            local allPieces = {}
-                            for _, piece in pairs(worldFolder:GetChildren()) do
-                                if piece:IsA("BasePart") or piece:IsA("Model") then
-                                    table.insert(allPieces, piece)
-                                end
-                            end
-                            
-                            local unvisitedPieces = {}
-                            for _, piece in pairs(allPieces) do
-                                local isVisited = false
-                                for _, visitedPiece in pairs(visitedPiecesKillRandom) do
-                                    if visitedPiece == piece then
-                                        isVisited = true
-                                        break
+                            if not currentTargetPiece or not currentTargetPiece.Parent then
+                                local allPieces = {}
+                                for _, piece in pairs(worldFolder:GetChildren()) do
+                                    if piece:IsA("BasePart") or piece:IsA("Model") then
+                                        table.insert(allPieces, piece)
                                     end
                                 end
-                                if not isVisited then
-                                    local folder = piece:FindFirstChild("Folder")
-                                    if not folder or #folder:GetChildren() == 0 then
-                                        table.insert(unvisitedPieces, piece)
-                                    end
-                                end
-                            end
-                            
-                            if #unvisitedPieces == 0 and #allPieces > 0 then
-                                visitedPiecesKillRandom = {}
-                                for _, piece in pairs(allPieces) do
-                                    local folder = piece:FindFirstChild("Folder")
-                                    if not folder or #folder:GetChildren() == 0 then
-                                        table.insert(unvisitedPieces, piece)
-                                    end
-                                end
-                            end
-                            
-                            if #unvisitedPieces > 0 then
-                                local targetPiece = unvisitedPieces[math.random(1, #unvisitedPieces)]
-                                local targetCFrame = nil
                                 
-                                if targetPiece:IsA("BasePart") then
-                                    targetCFrame = targetPiece.CFrame + Vector3.new(0, 8, 0)
-                                elseif targetPiece:IsA("Model") then
-                                    if targetPiece.PrimaryPart then
-                                        targetCFrame = targetPiece.PrimaryPart.CFrame + Vector3.new(0, 8, 0)
+                                local unvisitedPieces = {}
+                                for _, piece in pairs(allPieces) do
+                                    local isVisited = false
+                                    for _, visitedPiece in pairs(visitedPiecesKillRandom) do
+                                        if visitedPiece == piece then
+                                            isVisited = true
+                                            break
+                                        end
+                                    end
+                                    if not isVisited then
+                                        local folder = piece:FindFirstChild("Folder")
+                                        if not folder or #folder:GetChildren() == 0 then
+                                            table.insert(unvisitedPieces, piece)
+                                        end
+                                    end
+                                end
+                                
+                                if #unvisitedPieces == 0 and #allPieces > 0 then
+                                    visitedPiecesKillRandom = {}
+                                    for _, piece in pairs(allPieces) do
+                                        local folder = piece:FindFirstChild("Folder")
+                                        if not folder or #folder:GetChildren() == 0 then
+                                            table.insert(unvisitedPieces, piece)
+                                        end
+                                    end
+                                end
+                                
+                                if #unvisitedPieces > 0 then
+                                    currentTargetPiece = unvisitedPieces[math.random(1, #unvisitedPieces)]
+                                end
+                            end
+                            
+                            if currentTargetPiece then
+                                local targetCFrame = nil
+                                if currentTargetPiece:IsA("BasePart") then
+                                    targetCFrame = currentTargetPiece.CFrame + Vector3.new(0, 8, 0)
+                                elseif currentTargetPiece:IsA("Model") then
+                                    if currentTargetPiece.PrimaryPart then
+                                        targetCFrame = currentTargetPiece.PrimaryPart.CFrame + Vector3.new(0, 8, 0)
                                     else
-                                        for _, d in pairs(targetPiece:GetDescendants()) do
+                                        for _, d in pairs(currentTargetPiece:GetDescendants()) do
                                             if d:IsA("BasePart") then
                                                 targetCFrame = d.CFrame + Vector3.new(0, 8, 0)
                                                 break
@@ -2349,57 +2449,31 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
                                 end
                                 
                                 if targetCFrame then
-                                    local _, _, hrp = getCharacterParts()
-                                    if hrp then
-                                        pcall(function()
-                                            hrp.CFrame = targetCFrame
-                                        end)
-                                    end
-                                    
-                                    task.wait(0.5)
-                                    
-                                    local attackStarted = false
-                                    local waitTime = 0
-                                    while not attackStarted and waitTime < 3 and autoKillRandomMobActive do
-                                        local folder = targetPiece:FindFirstChild("Folder")
-                                        if folder and #folder:GetChildren() > 0 then
-                                            attackStarted = true
-                                        else
-                                            task.wait(0.2)
-                                            waitTime = waitTime + 0.2
+                                    local currentTime = tick()
+                                    if currentTime - lastTeleportTime >= 0.035 then
+                                        local _, _, hrp = getCharacterParts()
+                                        if hrp then
+                                            pcall(function()
+                                                hrp.CFrame = targetCFrame
+                                            end)
                                         end
+                                        lastTeleportTime = currentTime
                                     end
                                     
                                     pcall(function()
                                         getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
                                     end)
                                     
-                                    local isAlive = true
-                                    local startTime = tick()
-                                    while isAlive and autoKillRandomMobActive and (tick() - startTime) < 60 do
-                                        local folder = targetPiece:FindFirstChild("Folder")
-                                        if not folder or #folder:GetChildren() == 0 then
-                                            isAlive = false
-                                        end
-                                        task.wait(1)
+                                    local folder = currentTargetPiece:FindFirstChild("Folder")
+                                    if not folder or #folder:GetChildren() == 0 then
+                                        table.insert(visitedPiecesKillRandom, currentTargetPiece)
+                                        currentTargetPiece = nil
                                     end
-                                    
-                                    table.insert(visitedPiecesKillRandom, targetPiece)
                                 end
-                            else
-                                task.wait(0.5)
                             end
-                        else
-                            task.wait(0.5)
                         end
-                    else
-                        task.wait(0.5)
                     end
-                else
-                    task.wait(0.5)
                 end
-                
-                task.wait(0.5)
             end
         end)
     end
