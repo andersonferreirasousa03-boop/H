@@ -2160,21 +2160,10 @@ createOption("Auto Farm Accessories", false, "Farm", function(state)
                                     pcall(function()
                                         getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
                                     end)
-                                    task.wait(0.05)
-                                else
-                                    task.wait(1)
                                 end
-                            else
-                                task.wait(1)
                             end
-                        else
-                            task.wait(1)
                         end
-                    else
-                        task.wait(1)
                     end
-                else
-                    task.wait(1)
                 end
             end
         end)
@@ -2284,55 +2273,41 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
     if state then
         visitedPiecesKillRandom = {}
         task.spawn(function()
+            local targetPiece = nil
+            local targetCFrame = nil
+            local currentWorldName = nil
+            local teleportLoop = nil
+            
             while autoKillRandomMobActive do
-                local selectedMobWorld = optionStates["MobWorldSelector"]
-                local targetWorldName = nil
+                currentWorldName = getCurrentWorldName()
+                local selectedWorld = optionStates["MobWorldSelector"]
                 
-                if selectedMobWorld then
-                    targetWorldName = mobWorldsList[selectedMobWorld]
-                end
-                
-                local currentWorldName = getCurrentWorldName()
-                
-                if targetWorldName and currentWorldName ~= targetWorldName then
-                    local mapName
-                    local teleportDest
-                    
-                    if targetWorldName == "World1" then
-                        teleportDest = "LevelingCity"
-                    elseif targetWorldName == "World2" then
-                        teleportDest = "BlacksmithsVillage"
-                    elseif targetWorldName == "World3" then
-                        teleportDest = "PlanetOfWarriors"
-                    elseif targetWorldName == "World4" then
-                        teleportDest = "PirateIsland"
-                    elseif targetWorldName == "World5" then
-                        teleportDest = "TowerCity"
-                    end
-                    
-                    if teleportDest then
+                if selectedWorld then
+                    local targetWorldName = worldMapNames[selectedWorld]
+                    if currentWorldName ~= targetWorldName then
                         local teleportArgs = {
                             [1] = "General",
                             [2] = "Portal",
                             [3] = "Teleport",
-                            [4] = teleportDest
+                            [4] = targetWorldName
                         }
                         pcall(function()
                             game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("Bridge"):FireServer(unpack(teleportArgs))
                         end)
-                        task.wait(0.3)
+                        task.wait(0.05)
+                        currentWorldName = getCurrentWorldName()
                     end
-                else
-                    currentWorldName = getCurrentWorldName()
+                end
+                
+                if currentWorldName then
+                    local server = workspace:FindFirstChild("Server")
+                    local enemiesRoot = server and server:FindFirstChild("Enemies")
                     
-                    if currentWorldName then
-                        local server = workspace:FindFirstChild("Server")
-                        local enemiesRoot = server and server:FindFirstChild("Enemies")
+                    if enemiesRoot then
+                        local worldFolder = enemiesRoot:FindFirstChild(currentWorldName)
                         
-                        if enemiesRoot then
-                            local worldFolder = enemiesRoot:FindFirstChild(currentWorldName)
-                            
-                            if worldFolder then
+                        if worldFolder then
+                            if not targetPiece or not targetPiece.Parent then
                                 local allPieces = {}
                                 for _, piece in pairs(worldFolder:GetChildren()) do
                                     if piece:IsA("BasePart") or piece:IsA("Model") then
@@ -2368,8 +2343,7 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
                                 end
                                 
                                 if #unvisitedPieces > 0 then
-                                    local targetPiece = unvisitedPieces[math.random(1, #unvisitedPieces)]
-                                    local targetCFrame = nil
+                                    targetPiece = unvisitedPieces[math.random(1, #unvisitedPieces)]
                                     
                                     if targetPiece:IsA("BasePart") then
                                         targetCFrame = targetPiece.CFrame + Vector3.new(0, 8, 0)
@@ -2386,67 +2360,52 @@ createOption("Auto Kill Random Mob", false, "Farm", function(state)
                                         end
                                     end
                                     
-                                    if targetCFrame then
-                                        local _, _, hrp = getCharacterParts()
-                                        if hrp then
-                                            pcall(function()
-                                                hrp.CFrame = targetCFrame
-                                            end)
-                                        end
-                                        
-                                        task.wait(0.3)
-                                        
-                                        local attackStarted = false
-                                        local waitTime = 0
-                                        while not attackStarted and waitTime < 3 and autoKillRandomMobActive do
-                                            local folder = targetPiece:FindFirstChild("Folder")
-                                            if folder and #folder:GetChildren() > 0 then
-                                                attackStarted = true
-                                            else
-                                                task.wait(0.15)
-                                                waitTime = waitTime + 0.15
-                                            end
-                                        end
-                                        
-                                        pcall(function()
-                                            getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
-                                        end)
-                                        
-                                        local isAlive = true
-                                        local startTime = tick()
-                                        while isAlive and autoKillRandomMobActive and (tick() - startTime) < 60 do
+                                    if teleportLoop then
+                                        teleportLoop:Disconnect()
+                                    end
+                                    
+                                    teleportLoop = RunService.Heartbeat:Connect(function()
+                                        if autoKillRandomMobActive and targetPiece and targetPiece.Parent and targetCFrame then
+                                            local _, _, hrp = getCharacterParts()
                                             if hrp then
                                                 pcall(function()
                                                     hrp.CFrame = targetCFrame
                                                 end)
                                             end
-                                            
-                                            local folder = targetPiece:FindFirstChild("Folder")
-                                            if not folder or #folder:GetChildren() == 0 then
-                                                isAlive = false
-                                            end
-                                            task.wait(0.1)
+                                        elseif not autoKillRandomMobActive and teleportLoop then
+                                            teleportLoop:Disconnect()
+                                            teleportLoop = nil
                                         end
-                                        
-                                        table.insert(visitedPiecesKillRandom, targetPiece)
-                                    else
-                                        task.wait(0.2)
-                                    end
-                                else
-                                    task.wait(0.3)
+                                    end)
+                                    
+                                    pcall(function()
+                                        getRemote("Bridge"):FireServer("Fighters", "Attack", "Auto")
+                                    end)
                                 end
                             else
-                                task.wait(0.3)
+                                local _, _, hrp = getCharacterParts()
+                                if hrp and targetCFrame then
+                                    pcall(function()
+                                        hrp.CFrame = targetCFrame
+                                    end)
+                                end
                             end
-                        else
-                            task.wait(0.3)
+                            
+                            if targetPiece and targetPiece.Parent then
+                                local folder = targetPiece:FindFirstChild("Folder")
+                                if not folder or #folder:GetChildren() == 0 then
+                                    table.insert(visitedPiecesKillRandom, targetPiece)
+                                    targetPiece = nil
+                                    targetCFrame = nil
+                                end
+                            end
                         end
-                    else
-                        task.wait(0.3)
                     end
                 end
-                
-                task.wait(0.1)
+            end
+            
+            if teleportLoop then
+                teleportLoop:Disconnect()
             end
         end)
     end
